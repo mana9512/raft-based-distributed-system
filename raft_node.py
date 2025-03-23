@@ -6,9 +6,10 @@ import random
 from flask_cors import CORS
 
 class RaftNode:
-    def __init__(self, node_id, port):
+    def __init__(self, node_id, port, all_ports):
         self.node_id = node_id
         self.port = port
+        self.all_ports = all_ports
         self.term = 0
         self.state = 'follower'
         self.vote_count = 0
@@ -16,7 +17,7 @@ class RaftNode:
         self.timeout = random.randint(150, 300) / 1000
         self.last_heartbeat = time.time()
         self.active = False
-        self.node_status = {0: False, 1: False, 2: False}
+        self.node_status = {i: False for i in range(len(all_ports))}
         self.vote_log = {}
 
         self.app = Flask(__name__)
@@ -61,18 +62,18 @@ class RaftNode:
         self.leader_id = None
         self.vote_log[self.term] = self.node_id
 
-        for port in range(8000, 8003):
+        for port in self.all_ports:
             if port == self.port:
                 continue
             try:
                 response = requests.post(f"http://127.0.0.1:{port}/request_vote", json={'term': self.term, 'candidate_id': self.node_id}, timeout=1)
                 if response.status_code == 200 and response.json().get('vote_granted'):
                     self.vote_count += 1
-                    print(f"[Node {self.node_id}] Received vote from Node {port - 8000}")
+                    print(f"[Node {self.node_id}] Received vote from Node {port - self.all_ports[0]}")
             except Exception as e:
                 print(f"[Node {self.node_id}] Failed to reach Node {port} for vote request: {e}")
 
-        if self.vote_count > 1:
+        if self.vote_count > len(self.all_ports) // 2:
             self.state = 'leader'
             self.leader_id = self.node_id
             print(f"[Node {self.node_id}] Became leader for term {self.term} with {self.vote_count} votes")
@@ -82,19 +83,17 @@ class RaftNode:
 
     def send_heartbeat(self):
         self.active = False
-        for port in range(8000, 8003):
+        for port in self.all_ports:
             if port == self.port:
                 continue
             try:
                 response = requests.post(f"http://127.0.0.1:{port}/heartbeat", json={'term': self.term}, timeout=1)
                 if response.status_code == 200:
-                    self.node_status[port - 8000] = True
-                    print(f"[Node {self.node_id}] Sent heartbeat to Node {port - 8000}")
+                    self.node_status[port - self.all_ports[0]] = True
                 else:
-                    self.node_status[port - 8000] = False
-            except Exception as e:
-                self.node_status[port - 8000] = False
-                print(f"[Node {self.node_id}] Heartbeat to Node {port - 8000} failed: {e}")
+                    self.node_status[port - self.all_ports[0]] = False
+            except Exception:
+                self.node_status[port - self.all_ports[0]] = False
         self.active = True
 
     def send_heartbeat_ui(self):
@@ -135,31 +134,31 @@ class RaftNode:
                 time.sleep(2)
             time.sleep(self.timeout)
 
-def run_node(node_id, port):
-    node = RaftNode(node_id, port)
+def run_node(node_id, port, all_ports):
+    node = RaftNode(node_id, port, all_ports)
     threading.Thread(target=node.start_server).start()
     node.run()
 
 if __name__ == "__main__":
     import sys
-    node_ports = {0: 8000, 1: 8001, 2: 8002}
+    node_ports = [8000, 8001, 8002, 8003, 8004, 8005, 8006]
 
     if len(sys.argv) == 2:
         try:
             node_id = int(sys.argv[1])
-            if node_id not in node_ports:
-                print(f"Invalid node ID: {node_id}. Available nodes: {list(node_ports.keys())}")
+            if node_id not in range(len(node_ports)):
+                print(f"Invalid node ID: {node_id}. Available nodes: 0 to {len(node_ports)-1}")
                 sys.exit(1)
             port = node_ports[node_id]
             print(f"Starting Node {node_id} on port {port}...")
-            run_node(node_id, port)
+            run_node(node_id, port, node_ports)
         except ValueError:
             print("Please provide a valid integer node ID.")
     else:
         print("No node ID provided. Running all nodes...")
         threads = []
-        for node_id, port in node_ports.items():
-            thread = threading.Thread(target=run_node, args=(node_id, port))
+        for node_id, port in enumerate(node_ports):
+            thread = threading.Thread(target=run_node, args=(node_id, port, node_ports))
             thread.start()
             threads.append(thread)
         for thread in threads:
