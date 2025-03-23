@@ -32,7 +32,12 @@ raft-consensus-system/
 ---
 
 ## UI
-<img width="1440" alt="Screenshot 2025-03-23 at 10 35 24 AM" src="https://github.com/user-attachments/assets/8ff0dd2d-7e9d-4f8a-8d67-f5573d69f851" />
+### Candidate 5 is elected as Leader after getting max votes
+<img width="1440" alt="Screenshot 2025-03-23 at 10 56 47 AM" src="https://github.com/user-attachments/assets/e7224bdc-0709-4ea0-bcbc-02e5baefaad8" />
+
+
+### Election Fails when more than half nodes are down.
+<img width="1440" alt="Screenshot 2025-03-23 at 10 57 10 AM" src="https://github.com/user-attachments/assets/bf5b9b40-52a5-4444-9349-6417979a031a" />
 
 
 ## 🔧 Setup Instructions
