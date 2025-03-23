@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raft Consensus Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+    }
+    header {
+      background-color: #333;
+      color: white;
+      text-align: center;
+      padding: 20px;
+      font-size: 24px;
+    }
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin: 20px 0;
+    }
+    select, button {
+      padding: 10px 15px;
+      font-size: 16px;
+    }
+    .status-bar {
+      text-align: center;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    .node-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      padding: 20px;
+    }
+    .node {
+      background: white;
+      border: 2px solid #ccc;
+      border-radius: 10px;
+      width: 260px;
+      padding: 15px;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+    }
+    .leader {
+      border-color: #28a745;
+      background-color: #e8fbe8;
+    }
+    .follower {
+      border-color: #007bff;
+    }
+    .candidate {
+      border-color: #ffc107;
+    }
+    .heartbeat-active {
+      box-shadow: 0 0 10px 2px rgba(0, 128, 0, 0.3);
+    }
+    .unreachable {
+      border-color: red;
+      background-color: #ffe6e6;
+    }
+    .node-title {
+      font-weight: bold;
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    .info-line {
+      margin: 5px 0;
+      font-size: 15px;
+    }
+  </style>
+  <script>
+    const nodePorts = [8000, 8001, 8002];
+
+    function startElection(port) {
+      fetch(`http://127.0.0.1:${port}/start_election`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('election_status').innerText =
+            data.leader_id !== null
+              ? `✅ Leader Elected: Node ${data.leader_id} | Term ${data.term} | Votes: ${data.votes}`
+              : `❌ Election Failed: Votes ${data.votes}`;
+          updateNodes();
+        })
+        .catch(() => {
+          document.getElementById('election_status').innerText = `⚠️ Error: Unable to initiate election.`;
+        });
+    }
+
+    function sendHeartbeat(port) {
+      fetch(`http://127.0.0.1:${port}/send_heartbeat`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('heartbeat_status').innerText =
+            data.status.includes('sent') ? `💓 Heartbeat Sent Successfully` : `⚠️ ${data.status}`;
+          updateNodes();
+        })
+        .catch(() => {
+          document.getElementById('heartbeat_status').innerText = `⚠️ Error sending heartbeat.`;
+        });
+    }
+
+    function getRoleIcon(role) {
+      if (role === 'leader') return '👑';
+      if (role === 'follower') return '🟦';
+      if (role === 'candidate') return '🟨';
+      return '❔';
+    }
+
+    function getStatus(port, index) {
+      fetch(`http://127.0.0.1:${port}/get_status`)
+        .then(res => res.json())
+        .then(data => {
+          const node = document.getElementById(`node${index}`);
+          node.className = 'node';
+
+          if (data.state === 'leader') node.classList.add('leader');
+          if (data.state === 'follower') node.classList.add('follower');
+          if (data.state === 'candidate') node.classList.add('candidate');
+          if (data.active) node.classList.add('heartbeat-active');
+
+          const statusHTML = `
+            <div class="node-title">Node ${data.node_id} ${getRoleIcon(data.state)}</div>
+            <div class="info-line">📶 Role: ${data.state.charAt(0).toUpperCase() + data.state.slice(1)}</div>
+            <div class="info-line">📅 Term: ${data.term}</div>
+            <div class="info-line">👑 Leader: ${data.leader_id ?? 'None'}</div>
+            <div class="info-line">💓 Active: ${data.active ? 'Yes ✅' : 'No ❌'}</div>
+            <div class="info-line">📨 Last Vote (Term ${data.term}): Node ${data.votes?.[data.term]}</div>
+            <div class="info-line">📡 Reachability: ${Object.entries(data.node_status).map(([k, v]) => `Node ${k}: ${v ? '✅' : '❌'}`).join(' | ')}</div>
+          `;
+          document.getElementById(`node_info_${index}`).innerHTML = statusHTML;
+        })
+        .catch(() => {
+          const node = document.getElementById(`node${index}`);
+          node.className = 'node unreachable';
+          document.getElementById(`node_info_${index}`).innerHTML = `<div class='node-title'>Node ${index}</div><div class='info-line'>❌ Node Unreachable</div>`;
+        });
+    }
+
+    function updateNodes() {
+      nodePorts.forEach((port, index) => getStatus(port, index));
+    }
+
+    setInterval(updateNodes, 5000);
+  </script>
+</head>
+<body>
+  <header>Raft Consensus System Dashboard</header>
+  <div class="controls">
+    <label for="controlNode">Control Node:</label>
+    <select id="controlNode">
+      <option value="8000">Node 0</option>
+      <option value="8001">Node 1</option>
+      <option value="8002">Node 2</option>
+    </select>
+    <button onclick="startElection(document.getElementById('controlNode').value)">Start Election</button>
+    <button onclick="sendHeartbeat(document.getElementById('controlNode').value)">Send Heartbeat</button>
+  </div>
+  <div class="status-bar">
+    <p id="election_status">Leader: Unknown</p>
+    <p id="heartbeat_status">Heartbeat: Inactive</p>
+  </div>
+  <div class="node-container">
+    <div id="node0" class="node"><div id="node_info_0">Loading...</div></div>
+    <div id="node1" class="node"><div id="node_info_1">Loading...</div></div>
+    <div id="node2" class="node"><div id="node_info_2">Loading...</div></div>
+  </div>
+</body>
+</html>
